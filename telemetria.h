@@ -14,10 +14,9 @@ struct TelemetriaVeiculo {
   float tempIntake;
   float zeroCemUltimo;
   float tps;              
-  
-  // --- Dados de Configuração do Carro ---
-  float motor_litros;     // Ex: 2.0 ou 2.5
-  float eficiencia_ve;    // Ex: 0.85 (85% de eficiência volumétrica)
+  float motor_litros;     
+  float eficiencia_ve;    
+  bool modoSimulador;
 };
 
 extern TelemetriaVeiculo telemetria;

@@ -26,17 +26,30 @@ void atualizarTouch() {
       estavaPressionado = false; 
       int ev = 0; 
 
-      if (modoTela == 0) { 
-        // Qualquer toque rápido em qualquer lugar da HUD principal abre o menu limpo
-        ev = 1; 
+      if (modoTela == 0) { // TELA_HUD_PRINCIPAL
+        ev = 1; // Toque rápido abre o menu
       } 
-      else if (modoTela == 1) { 
-        if (ultimoX >= 20 && ultimoX <= 300) {
-          if (ultimoY >= 50 && ultimoY <= 90) ev = 3;       // Botão Ajustar Litragem Motor
-          else if (ultimoY >= 105 && ultimoY <= 145) ev = 4; // Botão Abrir Terminal Debug
+      else if (modoTela == 1) { // TELA_MENU_CONFIG
+        // Mapeia os cliques nas linhas do menu
+        if (ultimoY >= 45 && ultimoY <= 180) {
+          if (ultimoY < 81) ev = 3;       // Escolheu Linha 1: Buscar Wi-Fi
+          else if (ultimoY < 117) ev = 8; // Linha 2: Bluetooth (Rola índice por hora)
+          else if (ultimoY < 153) ev = 2; // Linha 3: Forçar reinicialização (Volta pro dash)
         }
-        if (ultimoX >= 80 && ultimoX <= 240 && ultimoY >= 185 && ultimoY <= 220) {
-          ev = 2; // Botão Vermelho Voltar Pro Dash
+        if (ultimoY >= 185) ev = 2; // Linha 4: Sair e voltar
+      } 
+      else if (modoTela == 3) { // WIFI_TELA_LISTA
+        if (ultimoY >= 45 && ultimoY <= 170) {
+          ev = 4; // Selecionou a rede clicada
+        } else if (ultimoY >= 195) {
+          ev = 2; // Botão vermelho de cancelar volta pro Dash
+        }
+      } 
+      else if (modoTela == 4) { // WIFI_TELA_SENHA (Teclado Virtual de 3 botões na base)
+        if (ultimoY >= 185) {
+          if (ultimoX < 95) ev = 5;       // Clicou no botão [ < ]
+          else if (ultimoX < 185) ev = 6; // Clicou no botão [ > ]
+          else ev = 7;                    // Clicou no botão [ CONECTAR ]
         }
       }
 
