@@ -3,7 +3,7 @@
 
 #include <M5Unified.h>
 
-// Funções para renderizar a HUD e seus componentes analógicos/vetoriais
-void renderizarHUDPrincipal(M5Canvas* canvas, M5Canvas* sprPonteiro, M5Canvas* sprTurbo, M5Canvas* sprFuel);
+void inicializarHUD();
+void renderizarHUDPrincipal(M5Canvas &canvasVirtual, M5Canvas &sprTurbo, M5Canvas &sprFuel, M5Canvas &sprPonteiro);
 
 #endif

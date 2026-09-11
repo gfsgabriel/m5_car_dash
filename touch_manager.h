@@ -3,10 +3,10 @@
 
 #include <Arduino.h>
 
-// Initializes the tracking flags
+// Inicializa variáveis de controle de toque
 void inicializarTouch();
 
-// Tracks live coordinate bounding boxes (Hover) and pushes to queue on release
+// Processa interações físicas na tela e atualiza hovers/filas
 void atualizarTouch();
 
 #endif

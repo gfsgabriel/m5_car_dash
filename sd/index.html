@@ -6,8 +6,11 @@
     <title>Web Dashboard Telemetria</title>
     <style>
         body { font-family: Arial, sans-serif; background: #0c0c0c; color: #fff; margin: 0; padding: 20px; text-align: center; }
-        h1 { color: #00ffff; margin-bottom: 30px; letter-spacing: 1px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 15px; max-width: 600px; margin: 0 auto; }
+        h1 { color: #00ffff; margin-bottom: 10px; letter-spacing: 1px; }
+        .status { font-size: 0.85em; margin-bottom: 25px; }
+        .status.on  { color: #00ff66; }
+        .status.off { color: #ff4444; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 15px; max-width: 800px; margin: 0 auto; }
         .data-card { background: #161616; border: 1px solid #2a2a2a; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
         .label { font-size: 0.9em; color: #888; text-transform: uppercase; font-weight: bold; }
         .val { font-size: 2.2em; font-weight: bold; color: #00ff66; margin-top: 5px; }
@@ -15,27 +18,70 @@
 </head>
 <body>
     <h1>LIVE TELEMETRY DASH</h1>
+    <div class="status" id="status">Conectando...</div>
     <div class="grid">
         <div class="data-card"><div class="label">RPM</div><div class="val" id="wsRpm">0</div></div>
         <div class="data-card"><div class="label">SPEED</div><div class="val" id="wsVel">0</div></div>
         <div class="data-card"><div class="label">BOOST</div><div class="val" id="wsBoost">0.00</div></div>
         <div class="data-card"><div class="label">FUEL FLOW</div><div class="val" id="wsFuel">0</div></div>
+        <div class="data-card"><div class="label">COOLANT</div><div class="val" id="wsCoolant">--</div></div>
+        <div class="data-card"><div class="label">INTAKE</div><div class="val" id="wsIntake">--</div></div>
+        <div class="data-card"><div class="label">TPS</div><div class="val" id="wsTps">0</div></div>
+        <div class="data-card"><div class="label">BATTERY</div><div class="val" id="wsBat">0.0</div></div>
     </div>
 
     <script>
         let gateway = `ws://${window.location.hostname}/ws`;
         let websocket;
-        function initWebSocket() {
-            websocket = new WebSocket(gateway);
-            websocket.onmessage = function(event) {
-                let d = JSON.parse(event.data);
-                document.getElementById("wsRpm").innerText = Math.round(d.rpm);
-                document.getElementById("wsVel").innerText = Math.round(d.vel);
-                document.getElementById("wsBoost").innerText = d.boost.toFixed(2);
-                document.getElementById("wsFuel").innerText = Math.round(d.fuel);
-            };
-            websocket.onclose = function() { setTimeout(initWebSocket, 2000); };
+        let reconnectTimer = null;
+
+        function setStatus(txt, ok) {
+            const el = document.getElementById("status");
+            el.innerText = txt;
+            el.className = "status " + (ok ? "on" : "off");
         }
+
+        function safeNum(v, def = 0) {
+            const n = parseFloat(v);
+            return isFinite(n) ? n : def;
+        }
+
+        function initWebSocket() {
+            if (websocket && websocket.readyState === WebSocket.OPEN) return;
+            setStatus("Conectando...", false);
+            websocket = new WebSocket(gateway);
+
+            websocket.onopen = () => setStatus("● Conectado", true);
+
+            websocket.onmessage = function(event) {
+                let d;
+                try { d = JSON.parse(event.data); }
+                catch (e) { return; }
+
+                // Ignora mensagens de log
+                if (d.tipo === "log") return;
+
+                document.getElementById("wsRpm").innerText     = Math.round(safeNum(d.rpm));
+                document.getElementById("wsVel").innerText     = Math.round(safeNum(d.velocidade));
+                document.getElementById("wsBoost").innerText   = safeNum(d.boost).toFixed(2);
+                document.getElementById("wsFuel").innerText    = Math.round(safeNum(d.consumo_ml));
+                document.getElementById("wsCoolant").innerText = Math.round(safeNum(d.temp_coolant)) + "°C";
+                document.getElementById("wsIntake").innerText  = Math.round(safeNum(d.temp_intake)) + "°C";
+                document.getElementById("wsTps").innerText     = Math.round(safeNum(d.tps)) + "%";
+                document.getElementById("wsBat").innerText     = safeNum(d.bateria).toFixed(1) + "V";
+            };
+
+            websocket.onclose = function() {
+                setStatus("● Desconectado — reconectando...", false);
+                if (reconnectTimer) clearTimeout(reconnectTimer);
+                reconnectTimer = setTimeout(initWebSocket, 2000);
+            };
+
+            websocket.onerror = function() {
+                setStatus("● Erro de conexão", false);
+            };
+        }
+
         window.onload = initWebSocket;
     </script>
 </body>

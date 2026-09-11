@@ -3,11 +3,16 @@
 
 #include <Arduino.h>
 
+// Inicializa o WebServer + WebSocket
 void inicializarWebServer();
-void gerenciarWebServer();
 
-// 🌟 Novas funções para o display manager ler o banco de logs centralizado do WebServer
-String obterLinhaLogWeb(int indice);
-int obterTotalLogsWeb();
+// Loop: drena fila de logs + envia telemetria 20 Hz
+void atualizarWebSocket();
+
+// API pública de log (chame de qualquer lugar)
+void registrarLogWebServer(String linhaLog);
+
+// Cache dos HTMLs em PSRAM (chamar ANTES de inicializarWebServer)
+void carregarHtmlsParaRam();
 
 #endif
