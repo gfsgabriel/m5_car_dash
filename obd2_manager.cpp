@@ -2,10 +2,11 @@
 #include <Arduino.h>
 #include <Preferences.h>
 
-// 🌟 FIX: Forward declaration so the compiler knows this function belongs to display_manager.cpp
-extern void adicionarLogDebug(String linhaLog);
+// 🌟 CORREÇÃO: Casamento perfeito de assinatura com o display_manager
+extern void adicionarLogDebug(const String& linhaLog);
 
 Preferences prefs;
+
 QueueHandle_t xFilaPIDsPrioridade;
 
 static float dirRPM = 150.0; static float dirVel = 1.2; static float dirMAF = 0.8;

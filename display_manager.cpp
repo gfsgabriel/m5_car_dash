@@ -161,6 +161,19 @@ static void desenharBarraRPMAnaDigi(float rpmAtual) {
   canvasVirtual.fillRect(corteRpmDigitalX, inicioCorteY, corteRpmDigitalLarg, alturaBarraRPM - inicioCorteY, BLACK);
 }
 
+// 🌟 CORREÇÃO: Aplica a referência constante na implementação real
+void adicionarLogDebug(const String& linhaLog) {
+  if (totalLinhasDebug < MAX_LINHAS_DEBUG) {
+    linhasDebug[totalLinhasDebug++] = linhaLog;
+  } else {
+    for (int i = 0; i < MAX_LINHAS_DEBUG - 1; i++) {
+      linhasDebug[i] = linhasDebug[i + 1];
+    }
+    linhasDebug[MAX_LINHAS_DEBUG - 1] = linhaLog;
+  }
+}
+
+
 // INTERFACE 0: DASH PRINCIPAL
 void renderizarHUDPrincipal() {
   canvasVirtual.fillScreen(BLACK);
