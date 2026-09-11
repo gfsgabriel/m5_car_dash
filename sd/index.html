@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Dashboard Telemetria</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #0c0c0c; color: #fff; margin: 0; padding: 20px; text-align: center; }
+        h1 { color: #00ffff; margin-bottom: 30px; letter-spacing: 1px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 15px; max-width: 600px; margin: 0 auto; }
+        .data-card { background: #161616; border: 1px solid #2a2a2a; padding: 20px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        .label { font-size: 0.9em; color: #888; text-transform: uppercase; font-weight: bold; }
+        .val { font-size: 2.2em; font-weight: bold; color: #00ff66; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <h1>LIVE TELEMETRY DASH</h1>
+    <div class="grid">
+        <div class="data-card"><div class="label">RPM</div><div class="val" id="wsRpm">0</div></div>
+        <div class="data-card"><div class="label">SPEED</div><div class="val" id="wsVel">0</div></div>
+        <div class="data-card"><div class="label">BOOST</div><div class="val" id="wsBoost">0.00</div></div>
+        <div class="data-card"><div class="label">FUEL FLOW</div><div class="val" id="wsFuel">0</div></div>
+    </div>
+
+    <script>
+        let gateway = `ws://${window.location.hostname}/ws`;
+        let websocket;
+        function initWebSocket() {
+            websocket = new WebSocket(gateway);
+            websocket.onmessage = function(event) {
+                let d = JSON.parse(event.data);
+                document.getElementById("wsRpm").innerText = Math.round(d.rpm);
+                document.getElementById("wsVel").innerText = Math.round(d.vel);
+                document.getElementById("wsBoost").innerText = d.boost.toFixed(2);
+                document.getElementById("wsFuel").innerText = Math.round(d.fuel);
+            };
+            websocket.onclose = function() { setTimeout(initWebSocket, 2000); };
+        }
+        window.onload = initWebSocket;
+    </script>
+</body>
+</html>

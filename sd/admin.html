@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel de Controle Admin</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #121212; color: #fff; padding: 20px; margin: 0; }
+        .box { max-width: 450px; margin: 0 auto; background: #1e1e1e; padding: 20px; border-radius: 8px; border: 1px solid #333; }
+        h2 { color: #ffaa00; margin-top: 0; border-bottom: 1px solid #333; padding-bottom: 8px; }
+        .card { background: #262626; padding: 15px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #444; }
+        .row { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 8px; color: #ccc; }
+        input[type="range"] { width: 100%; cursor: pointer; }
+        input[type="number"] { width: 100%; padding: 8px; background: #333; border: 1px solid #555; color: #fff; border-radius: 4px; box-sizing: border-box; }
+        button { background: #008cba; color: white; padding: 12px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; font-size: 1em; }
+        .active { background: #d9534f; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h2>Configurações do Painel</h2>
+        
+        <div class="card">
+            <button id="modeBtn" onclick="toggleSim()">Modo: OBD2 (Normal)</button>
+        </div>
+        
+        <div class="card" id="simBox" style="opacity: 0.3; pointer-events: none; transition: opacity 0.3s;">
+            <h3>Injetor de Dados (Bancada)</h3>
+            <div class="row">
+                <label>RPM: <span id="vRpm">0</span></label>
+                <input type="range" min="0" max="11500" value="0" oninput="setKey('rpm', this.value); document.getElementById('vRpm').innerText=this.value">
+            </div>
+            <div class="row">
+                <label>Velocidade: <span id="vVel">0</span> km/h</label>
+                <input type="range" min="0" max="250" value="0" oninput="setKey('velocidade', this.value); document.getElementById('vVel').innerText=this.value">
+            </div>
+            <div class="row">
+                <label>Boost (psi): <span id="vBoost">0.0</span></label>
+                <input type="range" min="-15" max="30" step="0.1" value="0" oninput="setKey('boost', this.value); document.getElementById('vBoost').innerText=this.value">
+            </div>
+            <div class="row">
+                <label>TPS (%): <span id="vTps">0</span></label>
+                <input type="range" min="0" max="100" value="0" oninput="setKey('tps', this.value); document.getElementById('vTps').innerText=this.value">
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Parâmetros do Veículo (Preferences NVS)</h3>
+            <div class="row">
+                <label>Cilindrada do Motor (Litros):</label>
+                <input type="number" id="cfgEngine" step="0.1" value="2.5" onchange="setKey('engine_size', this.value)">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isSim = false;
+        function toggleSim() {
+            isSim = !isSim;
+            let btn = document.getElementById("modeBtn");
+            let box = document.getElementById("simBox");
+            if(isSim) {
+                btn.innerText = "Modo: SIMULADOR (Injeção Ativa)";
+                btn.className = "active";
+                box.style.opacity = "1"; box.style.pointerEvents = "auto";
+                setKey("sim_mode", "1");
+            } else {
+                btn.innerText = "Modo: OBD2 (Normal)";
+                btn.className = "";
+                box.style.opacity = "0.3"; box.style.pointerEvents = "none";
+                setKey("sim_mode", "0");
+            }
+        }
+        function setKey(k, v) { fetch(`/set?key=${k}&value=${v}`); }
+        
+        window.onload = function() {
+            fetch('/get?key=engine_size').then(r => r.text()).then(val => {
+                document.getElementById("cfgEngine").value = parseFloat(val);
+            });
+        };
+    </script>
+</body>
+</html>
