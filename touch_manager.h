@@ -3,10 +3,10 @@
 
 #include <Arduino.h>
 
-// Inicializa a fila de toque e prepara o hardware
+// Initializes the tracking flags
 void inicializarTouch();
 
-// Varre o chip de toque de forma ultra rápida e injeta na fila do FreeRTOS
+// Tracks live coordinate bounding boxes (Hover) and pushes to queue on release
 void atualizarTouch();
 
 #endif

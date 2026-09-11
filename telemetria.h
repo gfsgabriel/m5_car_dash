@@ -16,7 +16,7 @@ struct TelemetriaVeiculo {
   float tps;              
   float motor_litros;     
   float eficiencia_ve;    
-  bool modoSimulador;
+  bool modoSimulador;     // True = Trava o mock e aceita os Sliders da Web
 };
 
 extern TelemetriaVeiculo telemetria;
