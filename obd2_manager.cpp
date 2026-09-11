@@ -5,46 +5,20 @@
 Preferences prefs;
 QueueHandle_t xFilaPIDsPrioridade;
 
-// Estrutura de armazenamento de Logs (Protegida aqui dentro)
-static String linhasDebug[MAX_LINHAS_DEBUG];
-static int totalLinhasDebug = 0;
-
 static float dirRPM = 150.0; static float dirVel = 1.2; static float dirMAF = 0.8;
 static uint32_t tempoInicioZeroCem = 0; static bool cronometroRodando = false;
 static uint32_t ultimoTempoMicros = 0; static double acumuladorMililitros = 0.0;
 static float valMAF = 4.5;
 
-static String pidsHIGH[10]   = {"010C", "0110", "011C", "012C", "013C"}; static int totalHIGH = 5;
-static String pidsMEDIUM[10] = {"010D", "0111"};                         static int totalMEDIUM = 2;
-static String pidsLOW[10]    = {"010F", "0105"};                         static int totalLOW = 2;
+static String pidsHIGH[5]   = {"010C", "0110", "011C", "012C", "013C"}; static int totalHIGH = 5;
+static String pidsMEDIUM[2] = {"010D", "0111"};                         static int totalMEDIUM = 2;
+static String pidsLOW[2]    = {"010F", "0105"};                         static int totalLOW = 2;
 
 static int idxHIGH = 0; static int idxMEDIUM = 0; static int idxLOW = 0;
 static int passosHighDados = 0; static int passosMediumDados = 0;
 
-// Implementação das funções de controle de log
-void adicionarLogDebug(const String& linhaLog) {
-  if (totalLinhasDebug < MAX_LINHAS_DEBUG) {
-    linhasDebug[totalLinhasDebug++] = linhaLog;
-  } else {
-    for (int i = 0; i < MAX_LINHAS_DEBUG - 1; i++) {
-      linhasDebug[i] = linhasDebug[i + 1];
-    }
-    linhasDebug[MAX_LINHAS_DEBUG - 1] = linhaLog;
-  }
-}
-
-String obterLinhaLog(int indice) {
-  if (indice >= 0 && indice < totalLinhasDebug) return linhasDebug[indice];
-  return "";
-}
-
-int obterTotalLogs() {
-  return totalLinhasDebug;
-}
-
 void vTarefaMockOBD2(void *pvParameters) {
   uint32_t tempoUltimoEnvioObd = 0;
-  uint32_t tempoUltimoLog = 0;
 
   for (;;) {
     if (millis() - tempoUltimoEnvioObd > 35) {
@@ -64,7 +38,8 @@ void vTarefaMockOBD2(void *pvParameters) {
       }
 
       if (pidEscolhido.length() > 0) {
-        adicionarLogDebug("TX: " + pidEscolhido + " -> RX: [OK]");
+        // Envia apenas para o Monitor Serial do PC enquanto não ativamos a fila do WebSocket de logs
+        Serial.println("TX: " + pidEscolhido + " -> RX: [OK]");
       }
     }
     vTaskDelay(pdMS_TO_TICKS(5));
@@ -78,10 +53,11 @@ void inicializarOBD2() {
 
   xFilaPIDsPrioridade = xQueueCreate(15, sizeof(uint32_t));
   telemetria = {0.0, 0.0, -15.0, 0.0, 0.0, 0.0, 0.0, 13.8, 92.0, 35.0, 0.0, 0.0, motorSalvo, veSalva, false};
-  ultimoTempoMicros = micros(); acumuladorMililitros = 0.0;
+  ultimoTempoMicros = micros(); 
+  acumuladorMililitros = 0.0;
 
   xTaskCreatePinnedToCore(vTarefaMockOBD2, "TaskMockOBD2", 4096, NULL, 1, NULL, 0);
-  adicionarLogDebug("SYS: Cascata H-M-L Dinamica Ativa");
+  Serial.println("SYS: Cascata H-M-L Dinamica Ativa");
 }
 
 void atualizarDadosOBD2() {
@@ -129,14 +105,16 @@ void atualizarDadosOBD2() {
   telemetria.boost = (float)(pressao_pascal * 0.000145038);
   if (telemetria.boost > telemetria.boost_max) telemetria.boost_max = telemetria.boost;
 
-  if (telemetria.velocidade <= 0.1) { cronometroRodando = false; } 
+  if (telemetria.velocidade <= 0.1) { 
+    cronometroRodando = false; 
+  } 
+  else if (telemetria.velocidade > 0.5 && !cronometroRodando && telemetria.velocidade < 100.0) {
+    tempoInicioZeroCem = millis(); 
+    cronometroRodando = true;
+  } 
   else if (cronometroRodando && telemetria.velocidade >= 100.0) {
-    telemetria.zeroCemUltimo = (float)(millis() - tempoInicioZeroCem) / 1000.0; cronometroRodando = false; 
-  }
-
-
-  else if (cronometroRodando && telemetria.velocidade >= 100.0) {
-    telemetria.zeroCemUltimo = (float)(millis() - tempoInicioZeroCem) / 1000.0; cronometroRodando = false; 
+    telemetria.zeroCemUltimo = (float)(millis() - tempoInicioZeroCem) / 1000.0; 
+    cronometroRodando = false; 
   }
 }
 

@@ -4,7 +4,6 @@
 #define CINZA_ESCURO 0x39E7
 #define CINZA_CLARO  0xC618
 
-// Parâmetros fixos e calibrados do painel
 static const int barraLarguraBloco = 4;   
 static const int barraLarguraEspaco = 1;  
 static const int alturaBarraRPM = 32;      
@@ -34,6 +33,7 @@ static void desenharBarraRPMAnaDigi(M5Canvas* cv, float rpmAtual) {
       cv->drawFastVLine(x, 0, alturaBarraRPM, CINZA_ESCURO);
     }
   }
+  // 🌟 CONFIGURADO E SEGURO: Máscaras limpas sem variáveis soltas
   int alturaDoCorte = alturaBarraRPM - inicioCorteY;
   cv->fillRect(corteVelocidadeX, inicioCorteY, corteVelocidadeLarg, alturaDoCorte, BLACK);
   cv->fillRect(corteRpmDigitalX, inicioCorteY, corteRpmDigitalLarg, alturaDoCorte, BLACK);
@@ -73,7 +73,6 @@ void renderizarHUDPrincipal(M5Canvas* cv, M5Canvas* sprPonteiro, M5Canvas* sprTu
   
   cv->setFont(&fonts::Font0); cv->setTextSize(1.5); cv->setCursor(192, 70); cv->print("km/h");
 
-  // Infos Auxiliares na lateral (Bateria medida nativamente mais tarde)
   cv->setCursor(10, 42); cv->printf("Bat: %.1fV", telemetria.bateria);
   cv->setCursor(10, 60); cv->printf("Cool: %.0f C", telemetria.tempCoolant);
   cv->setCursor(10, 78); cv->printf("Intk: %.0f C", telemetria.tempIntake);
@@ -89,7 +88,6 @@ void renderizarHUDPrincipal(M5Canvas* cv, M5Canvas* sprPonteiro, M5Canvas* sprTu
   cv->drawString(String(telemetria.consumo_total_litros, 3) + " L", 310, 81);
   cv->setTextDatum(textdatum_t::top_left);
 
-  // Plotagem dos 2 Gauges em 50%
   sprTurbo->pushSprite(cv, 0, 120);
   float angBoost = mapearAngulo(telemetria.boost, -15.0, 15.0);
   sprPonteiro->pushRotateZoom(cv, 0 + pivotX_R, 120 + pivotY_R, angBoost, 0.5, 0.5, 0);

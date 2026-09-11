@@ -1,6 +1,10 @@
 #ifndef TELEMETRIA_H
 #define TELEMETRIA_H
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <Arduino.h>
+
 struct TelemetriaVeiculo {
   float rpm;
   float velocidade;
@@ -16,9 +20,15 @@ struct TelemetriaVeiculo {
   float tps;              
   float motor_litros;     
   float eficiencia_ve;    
-  bool modoSimulador;     // True = Trava o mock e aceita os Sliders da Web
+  bool modoSimulador;     
 };
 
 extern TelemetriaVeiculo telemetria;
+
+// 🌟 NOVA FILA GLOBAL DE LOGS: Qualquer módulo pode postar um ponteiro de string aqui!
+extern QueueHandle_t xFilaLogs;
+
+// Função macro global rápida para postar mensagens na fila de qualquer lugar do app
+void logarMensagemApp(const String& msg);
 
 #endif

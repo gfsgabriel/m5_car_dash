@@ -3,10 +3,11 @@
 
 #include <Arduino.h>
 
-// Inicializa a rede Wi-Fi, configura os endpoints REST e liga o WebSocket
 void inicializarWebServer();
-
-// Executa em loop para limpar conexões mortas e disparar o broadcast de dados
 void gerenciarWebServer();
+
+// 🌟 Novas funções para o display manager ler o banco de logs centralizado do WebServer
+String obterLinhaLogWeb(int indice);
+int obterTotalLogsWeb();
 
 #endif

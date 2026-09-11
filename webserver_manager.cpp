@@ -12,6 +12,31 @@ extern Preferences prefs;
 AsyncWebServer server(80);
 AsyncWebSocket ws("/ws");
 
+// Banco de dados interno de logs gerenciado pela aplicação de rede
+#define MAX_LINHAS_WEB_LOG 8
+static String linhasLogWeb[MAX_LINHAS_WEB_LOG];
+static int totalLogsWeb = 0;
+
+void armazenarLogInterno(const String& linha) {
+  if (totalLogsWeb < MAX_LINHAS_WEB_LOG) {
+    linhasLogWeb[totalLogsWeb++] = linha;
+  } else {
+    for (int i = 0; i < MAX_LINHAS_WEB_LOG - 1; i++) {
+      linhasLogWeb[i] = linhasLogWeb[i + 1];
+    }
+    linhasLogWeb[MAX_LINHAS_WEB_LOG - 1] = linha;
+  }
+}
+
+String obterLinhaLogWeb(int indice) {
+  if (indice >= 0 && indice < totalLogsWeb) return linhasLogWeb[indice];
+  return "";
+}
+
+int obterTotalLogsWeb() {
+  return totalLogsWeb;
+}
+
 static String gerarSnapshotJSON() {
   String json = "{";
   json += "\"rpm\":" + String(telemetria.rpm) + ",";
@@ -26,7 +51,7 @@ static String gerarSnapshotJSON() {
 }
 
 void inicializarWebServer() {
-  // Entrega assíncrona dos arquivos estáticos vindos do SD
+  // Rota principal e administrativa do SD
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send(SD, "/index.html", "text/html");
   });
@@ -35,7 +60,11 @@ void inicializarWebServer() {
     request->send(SD, "/admin.html", "text/html");
   });
 
-  // REST API: GET Endpoint
+  // 🌟 NOVA ROTA: Entrega a página de logs direto da raiz do MicroSD!
+  server.on("/logs", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send(SD, "/logs.html", "text/html");
+  });
+
   server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request){
     if (request->hasParam("key")) {
       String key = request->getParam("key")->value();
@@ -47,7 +76,6 @@ void inicializarWebServer() {
     }
   });
 
-  // REST API: SET Endpoint (Processa os Sliders do /admin)
   server.on("/set", HTTP_GET, [](AsyncWebServerRequest *request){
     if (request->hasParam("key") && request->hasParam("value")) {
       String key = request->getParam("key")->value();
@@ -61,7 +89,6 @@ void inicializarWebServer() {
         telemetria.modoSimulador = (value == "1");
       } 
       else if (telemetria.modoSimulador) {
-        // Injeta os dados das barras deslizantes direto na RAM da telemetria
         if (key == "rpm") telemetria.rpm = value.toFloat();
         else if (key == "velocidade") telemetria.velocidade = value.toFloat();
         else if (key == "boost") telemetria.boost = value.toFloat();
@@ -75,10 +102,29 @@ void inicializarWebServer() {
 
   server.addHandler(&ws);
   server.begin();
+  logarMensagemApp("SYS: WebServer rodando na porta 80");
 }
 
 void gerenciarWebServer() {
   ws.cleanupClients(); 
+  
+  // 🌟 CONSUMIDOR DE FILA ASSÍNCRONO: Processa as strings enviadas de qualquer arquivo
+  String* msgRecebida;
+  while (xFilaLogs != NULL && xQueueReceive(xFilaLogs, &msgRecebida, 0) == pdTRUE) {
+    // 1. Salva no banco de dados local da RAM
+    armazenarLogInterno(*msgRecebida);
+    
+    // 2. Printa na serial como contingência caso esteja plugado no PC
+    Serial.println(*msgRecebida);
+    
+    // 3. Transmite via WebSocket em formato texto simples prefixado com "LOG:" para o browser capturar
+    if (ws.count() > 0) {
+      ws.textAll("LOG:" + (*msgRecebida));
+    }
+    
+    // Deleta a string da heap criada pela função helper logarMensagemApp
+    delete msgRecebida;
+  }
   
   static uint32_t ultimoBroadcast = 0;
   if (millis() - ultimoBroadcast > 50) {
