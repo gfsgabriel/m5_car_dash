@@ -2,13 +2,13 @@
 #define DISPLAY_MANAGER_H
 
 #include "telemetria.h"
-#include <Arduino.h> // Garante o escopo da classe String
+#include <Arduino.h>
 
 void inicializarDisplay();
 void atualizarInterfaceGrafica();
 int obterModoTelaAtual();
 
-// 🌟 CORREÇÃO: Passagem por referência constante para o Linker fechar o escopo
+// 🌟 THE CLEAN FIX: Simplified global debugger function signature
 void adicionarLogDebug(const String& linhaLog);
 
 #endif
