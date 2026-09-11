@@ -130,9 +130,11 @@ void atualizarDadosOBD2() {
   if (telemetria.boost > telemetria.boost_max) telemetria.boost_max = telemetria.boost;
 
   if (telemetria.velocidade <= 0.1) { cronometroRodando = false; } 
-  else if (telemetria.velocidade > 0.5 && !cronometroRodando && telemetria.velocidade < 100.0) {
-    tempoInicioZeroCem = millis(); cronorange = false; cronometroRodando = true;
-  } 
+  else if (cronometroRodando && telemetria.velocidade >= 100.0) {
+    telemetria.zeroCemUltimo = (float)(millis() - tempoInicioZeroCem) / 1000.0; cronometroRodando = false; 
+  }
+
+
   else if (cronometroRodando && telemetria.velocidade >= 100.0) {
     telemetria.zeroCemUltimo = (float)(millis() - tempoInicioZeroCem) / 1000.0; cronometroRodando = false; 
   }
