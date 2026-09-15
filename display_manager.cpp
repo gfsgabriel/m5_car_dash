@@ -5,6 +5,7 @@
 #include "webserver_manager.h"
 #include "spi_lock.h"
 #include <M5Unified.h>
+#include "bt_manager.h"
 
 static ModosTela modoAtual = TELA_HUD_PRINCIPAL;
 
@@ -93,6 +94,24 @@ void renderizarDisplay() {
   }
   else if (modoAtual == WIFI_TELA_SENHA) {
     renderizarWifiSenha(canvasVirtual);
+  }
+  else if (modoAtual == BT_TELA_STATUS) {
+    renderizarBTStatus(canvasVirtual);
+  }
+  else if (modoAtual == BT_TELA_LISTA) {
+    renderizarBTLista(canvasVirtual);
+  }
+  else if (modoAtual == BT_TELA_SENHA) {
+    renderizarBTSenha(canvasVirtual);
+  }
+  else if (modoAtual == BT_TELA_CONECTANDO) {
+    renderizarBTConectando(canvasVirtual);
+  }
+  else if (modoAtual == BT_TELA_RESULTADO) {
+    renderizarBTResultado(canvasVirtual);
+  }
+  else if (modoAtual == BT_TELA_MSG) {
+    renderizarBTMsg(canvasVirtual);
   }
 
   canvasVirtual.pushSprite(0, 0);

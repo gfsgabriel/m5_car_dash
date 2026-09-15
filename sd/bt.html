@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terminal BT</title>
+    <style>
+        body { font-family: 'Courier New', monospace; background: #0a0a0c; color: #00ff66; padding: 20px; margin: 0; }
+        h1 { color: #00ffff; font-size: 1.3em; border-bottom: 1px solid #222; padding-bottom: 10px; margin-bottom: 15px; }
+        h2 { color: #ffaa00; font-size: 1.1em; margin-top: 20px; margin-bottom: 10px; border-bottom: 1px solid #222; padding-bottom: 6px; }
+        .controls { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; align-items: center; }
+        input[type="text"] { flex: 1; padding: 10px; background: #1a1a1a; border: 1px solid #333; color: #00ff66; font-family: inherit; font-size: 1em; border-radius: 4px; min-width: 200px; }
+        button { padding: 10px 15px; background: #008cba; border: none; color: #fff; font-family: inherit; font-size: 0.95em; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #00a0d4; }
+        button.danger { background: #d9534f; }
+        button.danger:hover { background: #c9302c; }
+        button.raw { background: #7a5c00; }
+        button.raw:hover { background: #9a7500; }
+        .quick { display: flex; gap: 8px; margin-bottom: 15px; flex-wrap: wrap; }
+        .quick button { padding: 6px 10px; font-size: 0.85em; background: #333; }
+        .quick button:hover { background: #444; }
+        #terminal { background: #000; border: 1px solid #333; padding: 15px; height: 40vh; overflow-y: auto; border-radius: 6px; box-shadow: inset 0 0 10px #000; font-size: 0.9em; }
+        #rawTerminal { background: #000; border: 1px solid #333; padding: 15px; height: 30vh; overflow-y: auto; border-radius: 6px; box-shadow: inset 0 0 10px #000; font-size: 0.85em; }
+        .line { margin-bottom: 4px; line-height: 1.4em; white-space: pre-wrap; }
+        .tx  { color: #ffaa00; }
+        .rx  { color: #00ff66; }
+        .err { color: #ff4444; }
+        .sys { color: #00aaff; }
+        .raw { color: #888; }
+        #status { color: #888; font-size: 0.85em; margin-left: auto; }
+        #rawStatus { color: #888; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <h1>Terminal BT (XM-15B) <span id="status">desconectado</span></h1>
+
+    <div class="controls">
+        <input type="text" id="cmdInput" placeholder="Digite comando AT..." onkeydown="if(event.key==='Enter') enviar()">
+        <button onclick="enviar()">Enviar</button>
+        <button class="danger" onclick="document.getElementById('terminal').innerHTML=''">Limpar</button>
+    </div>
+
+    <div class="quick">
+        <button onclick="quick('AT')">AT</button>
+        <button onclick="quick('AT+ROLE?')">AT+ROLE?</button>
+        <button onclick="quick('AT+UART?')">AT+UART?</button>
+        <button onclick="quick('AT+CMODE?')">AT+CMODE?</button>
+        <button onclick="quick('AT+BIND?')">AT+BIND?</button>
+        <button onclick="quick('AT+ADDR?')">AT+ADDR?</button>
+        <button onclick="quick('AT+INQ')">AT+INQ</button>
+        <button onclick="quick('AT+RMAAD')">AT+RMAAD</button>
+        <button onclick="quick('AT+INIT')">AT+INIT</button>
+        <button onclick="quick('AT+DISC')">AT+DISC</button>
+        <button onclick="quick('AT+RESET')">AT+RESET</button>
+    </div>
+
+    <div id="terminal"></div>
+
+    <h2>Sniffer Raw (tudo que o XM manda)</h2>
+    <div class="controls">
+        <button id="btnRaw" class="raw" onclick="toggleRaw()">Ativar Sniffer</button>
+        <button class="danger" onclick="document.getElementById('rawTerminal').innerHTML=''">Limpar</button>
+        <span id="rawStatus">inativo</span>
+    </div>
+    <div id="rawTerminal"></div>
+
+    <script>
+        let gateway = `ws://${window.location.hostname}/ws`;
+        let websocket;
+        let reconnectTimer = null;
+        let term = document.getElementById("terminal");
+        let rawTerm = document.getElementById("rawTerminal");
+        let statusEl = document.getElementById("status");
+        let rawAtivo = false;
+
+        function appendLine(tipo, txt) {
+            let div = document.createElement("div");
+            div.className = "line " + tipo;
+            let visual = txt.replace(/\r/g, "\\r").replace(/\n/g, "\\n\n");
+            div.innerText = "[" + new Date().toLocaleTimeString() + "] " + visual;
+            term.appendChild(div);
+            term.scrollTop = term.scrollHeight;
+        }
+
+        function appendRaw(txt) {
+            let div = document.createElement("div");
+            div.className = "line raw";
+            let visual = txt.replace(/\r/g, "\\r").replace(/\n/g, "\\n\n");
+            div.innerText = visual;
+            rawTerm.appendChild(div);
+            rawTerm.scrollTop = rawTerm.scrollHeight;
+        }
+
+        function enviar() {
+            let input = document.getElementById("cmdInput");
+            let cmd = input.value.trim();
+            if (!cmd) return;
+            if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+                appendLine("err", "WebSocket desconectado");
+                return;
+            }
+            appendLine("tx", "> " + cmd);
+            websocket.send(JSON.stringify({tipo: "bt_cmd", cmd: cmd}));
+            input.value = "";
+            input.focus();
+        }
+
+        function quick(cmd) {
+            document.getElementById("cmdInput").value = cmd;
+            enviar();
+        }
+
+        function toggleRaw() {
+            let novo = !rawAtivo;
+            fetch('/api/bt/debug_raw?on=' + (novo ? '1' : '0'))
+                .then(r => r.text())
+                .then(txt => {
+                    rawAtivo = novo;
+                    document.getElementById("btnRaw").innerText = rawAtivo ? 'Desativar Sniffer' : 'Ativar Sniffer';
+                    document.getElementById("rawStatus").innerText = rawAtivo ? 'ativo' : 'inativo';
+                    document.getElementById("rawStatus").style.color = rawAtivo ? '#00ff66' : '#888';
+                    appendLine("sys", txt);
+                })
+                .catch(e => appendLine("err", "erro: " + e.message));
+        }
+
+        function initWebSocket() {
+            if (websocket && websocket.readyState === WebSocket.OPEN) return;
+            appendLine("sys", "Conectando...");
+            websocket = new WebSocket(gateway);
+
+            websocket.onopen = () => {
+                statusEl.innerText = "conectado";
+                appendLine("sys", "Conectado");
+            };
+
+            websocket.onmessage = function(event) {
+                let d;
+                try { d = JSON.parse(event.data); }
+                catch (e) { return; }
+
+                if (d.tipo === "bt_rx") {
+                    if (d.ok) appendLine("rx", "< " + d.linha);
+                    else appendLine("err", "< " + d.linha);
+                }
+                else if (d.tipo === "bt_raw") {
+                    appendRaw(d.data);
+                }
+            };
+
+            websocket.onclose = function() {
+                statusEl.innerText = "desconectado";
+                appendLine("sys", "Desconectado, reconectando em 2s...");
+                if (reconnectTimer) clearTimeout(reconnectTimer);
+                reconnectTimer = setTimeout(initWebSocket, 2000);
+            };
+
+            websocket.onerror = function() {
+                appendLine("err", "Erro no WebSocket");
+            };
+        }
+
+        window.onload = initWebSocket;
+    </script>
+</body>
+</html>

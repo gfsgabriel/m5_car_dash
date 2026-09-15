@@ -9,7 +9,8 @@
 #include "webserver_manager.h"
 #include "wifi_manager.h"
 #include "spi_lock.h"
-#include "sd_manager.h"        // ← NOVO (pra acessar uploadEmAndamento)
+#include "sd_manager.h"
+#include "bt_manager.h"
 
 #define SD_SPI_SCK  34
 #define SD_SPI_MISO 35
@@ -21,10 +22,15 @@ QueueHandle_t xFilaTouch;
 
 void setup() {
   auto cfg = M5.config();
+  cfg.serial_baudrate = 115200;
   M5.begin(cfg);
 
   M5.Display.setRotation(1);
   M5.Display.fillScreen(BLACK);
+
+  Serial.println();
+  Serial.println("=== M5 CAR DASH ===");
+  Serial.println("Serial OK");
 
   xFilaTouch = xQueueCreate(10, sizeof(int));
 
@@ -49,7 +55,10 @@ void setup() {
   inicializarOBD2();
   inicializarTouch();
   inicializarWifiManager();
+  inicializarBTManager();
   inicializarWebServer();
+
+  Serial.println("=== SETUP CONCLUIDO ===");
 }
 
 void loop() {
@@ -64,17 +73,30 @@ void loop() {
       case 2:  definirModoTela(TELA_HUD_PRINCIPAL); break;
       case 5:  definirModoTela(TELA_MENU_CONFIG); break;
       case 10: definirModoTela(WIFI_TELA_LISTA); break;
-      case 11: definirModoTela(BT_TELA_MENU); break;
       case 12: definirModoTela(WIFI_TELA_SENHA); break;
       case 13: definirModoTela(WIFI_TELA_ACOES); break;
+
+      // Bluetooth
+      case 20: definirModoTela(BT_TELA_LISTA); break;
+      case 21: definirModoTela(BT_TELA_STATUS); break;
+      case 22: definirModoTela(BT_TELA_SENHA); break;
+      case 23: definirModoTela(BT_TELA_CONECTANDO); break;
+      case 24: definirModoTela(BT_TELA_RESULTADO); break;
+
       default: break;
     }
   }
 
+  // Processa o scan pendente (não-bloqueante, só enfileira)
+  if (btScanPendente) {
+    btScanPendente = false;
+    iniciarScanBT();
+  }
+
+  atualizarBTManager();
   atualizarDadosOBD2();
   atualizarWebSocket();
 
-  // PAUSA o render do HUD durante upload (evita conflito SPI)
   if (!uploadEmAndamento) {
     renderizarDisplay();
   }

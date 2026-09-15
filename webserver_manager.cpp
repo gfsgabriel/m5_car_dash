@@ -3,6 +3,7 @@
 #include "obd2_manager.h"
 #include "spi_lock.h"
 #include "sd_manager.h"
+#include "bt_manager.h"
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <AsyncTCP.h>
@@ -15,7 +16,7 @@ static AsyncWebSocket ws("/ws");
 
 static QueueHandle_t xFilaLogsWebServer = NULL;
 static unsigned long ultimoEnvioWS = 0;
-const unsigned long INTERVALO_WS_MS = 50; // 20 Hz
+const unsigned long INTERVALO_WS_MS = 50;
 
 #define MAX_LOGS_BUFFER 20
 static String bufferLogs[MAX_LOGS_BUFFER];
@@ -27,15 +28,15 @@ static Preferences prefsAdmin;
 // ---------------------------------------------------------------
 // Cache de HTMLs em PSRAM
 // ---------------------------------------------------------------
-static char* htmlIndex = nullptr;
-static char* htmlAdmin = nullptr;
-static char* htmlLogs  = nullptr;
-static size_t tamIndex = 0, tamAdmin = 0, tamLogs = 0;
+static char* htmlIndex   = nullptr;
+static char* htmlAdmin   = nullptr;
+static char* htmlLogs    = nullptr;
+static char* htmlBt      = nullptr;
+static size_t tamIndex = 0, tamAdmin = 0, tamLogs = 0, tamBt = 0;
 
 static char* carregarArquivoPSRAM(const char* path, size_t* outTam) {
   *outTam = 0;
 
-  // No seu hardware, o SD tá montado na raiz "/"
   if (!SD.exists(path)) {
     Serial.printf("HTML: NAO ENCONTRADO: %s\n", path);
     return nullptr;
@@ -75,6 +76,7 @@ void carregarHtmlsParaRam() {
   htmlIndex = carregarArquivoPSRAM("/index.html", &tamIndex);
   htmlAdmin = carregarArquivoPSRAM("/admin.html", &tamAdmin);
   htmlLogs  = carregarArquivoPSRAM("/logs.html",  &tamLogs);
+  htmlBt    = carregarArquivoPSRAM("/bt.html",    &tamBt);
   Serial.println("===================================");
 }
 
@@ -112,6 +114,46 @@ static void guardarLogNoBuffer(const String& linha) {
 }
 
 // ---------------------------------------------------------------
+// Terminal BT
+// ---------------------------------------------------------------
+static uint32_t btTerminalIdPendente = 0;
+static uint32_t btTerminalClientId = 0;
+static unsigned long btTerminalInicio = 0;
+
+static void processarComandoTerminalBT(const String& cmd, uint32_t clientId) {
+  if (btTerminalIdPendente != 0) {
+    StaticJsonDocument<128> doc;
+    doc["tipo"] = "bt_rx";
+    doc["linha"] = "(aguarde: comando anterior ainda pendente)";
+    doc["ok"] = false;
+    String buf;
+    serializeJson(doc, buf);
+    AsyncWebSocketClient *c = ws.client(clientId);
+    if (c) c->text(buf);
+    return;
+  }
+
+  Serial.printf("WS: comando BT [%s]\n", cmd.c_str());
+
+  uint32_t id = btEnviarATPublico(cmd, 3000, DONO_BT_TERMINAL);
+  if (id == 0) {
+    StaticJsonDocument<128> doc;
+    doc["tipo"] = "bt_rx";
+    doc["linha"] = "(erro: fila cheia)";
+    doc["ok"] = false;
+    String buf;
+    serializeJson(doc, buf);
+    AsyncWebSocketClient *c = ws.client(clientId);
+    if (c) c->text(buf);
+    return;
+  }
+
+  btTerminalIdPendente = id;
+  btTerminalClientId = clientId;
+  btTerminalInicio = millis();
+}
+
+// ---------------------------------------------------------------
 // WebSocket events
 // ---------------------------------------------------------------
 void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
@@ -133,6 +175,27 @@ void onEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
   else if (type == WS_EVT_DISCONNECT) {
     Serial.printf("WS: cliente #%u desconectou\n", client->id());
   }
+  else if (type == WS_EVT_DATA) {
+    AwsFrameInfo *info = (AwsFrameInfo*)arg;
+    if (info->final && info->index == 0 && info->len == len) {
+      if (info->opcode == WS_TEXT) {
+        data[len] = 0;
+        String msg = (char*)data;
+
+        if (msg.indexOf("\"bt_cmd\"") >= 0) {
+          int pos = msg.indexOf("\"cmd\":\"");
+          if (pos >= 0) {
+            int inicio = pos + 7;
+            int fim = msg.indexOf("\"", inicio);
+            if (fim > inicio) {
+              String cmd = msg.substring(inicio, fim);
+              processarComandoTerminalBT(cmd, client->id());
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------
@@ -148,17 +211,12 @@ void inicializarWebServer() {
   ws.onEvent(onEvent);
   server.addHandler(&ws);
 
-  // =============================================================
-  // IMPORTANTE: rotas ESPECÍFICAS primeiro, genéricas DEPOIS
-  // =============================================================
-
   // -------- API: admin --------
   server.on("/api/admin/get", HTTP_GET, [](AsyncWebServerRequest *request){
     StaticJsonDocument<256> doc;
     doc["motor"] = telemetria.motor_litros;
     doc["ve"] = telemetria.eficiencia_ve;
     doc["sim_mode"] = telemetria.modoSimulador;
-
     String jsonBuffer;
     serializeJson(doc, jsonBuffer);
     request->send(200, "application/json", jsonBuffer);
@@ -194,14 +252,12 @@ void inicializarWebServer() {
     request->send(200, "application/json", jsonBuffer);
   });
 
-  // GET /api/admin/inject?rpm=3000&vel=80&maf=15&boost=10&tps=45&temp_coolant=90&temp_intake=35&bateria=13.8
   server.on("/api/admin/inject", HTTP_GET, [](AsyncWebServerRequest *request){
     if (!telemetria.modoSimulador) {
       request->send(409, "application/json", "{\"erro\":\"modo simulador desligado\"}");
       return;
     }
 
-    // ---- Campos diretos ----
     if (request->hasParam("rpm"))           telemetria.rpm         = request->getParam("rpm")->value().toFloat();
     if (request->hasParam("vel"))           telemetria.velocidade  = request->getParam("vel")->value().toFloat();
     if (request->hasParam("boost"))         telemetria.boost       = request->getParam("boost")->value().toFloat();
@@ -210,28 +266,23 @@ void inicializarWebServer() {
     if (request->hasParam("temp_intake"))   telemetria.tempIntake  = request->getParam("temp_intake")->value().toFloat();
     if (request->hasParam("bateria"))       telemetria.bateria     = request->getParam("bateria")->value().toFloat();
 
-    // ---- MAF → consumo instantâneo (mesma fórmula do obd2_manager) ----
     if (request->hasParam("maf")) {
       float maf = request->getParam("maf")->value().toFloat();
-      double combustivelGramsPerSec = (double)maf / 14.7;   // gasolina ~14.7:1
-      double litrosPerSec = combustivelGramsPerSec / 740.0; // densidade ~740 g/L
+      double combustivelGramsPerSec = (double)maf / 14.7;
+      double litrosPerSec = combustivelGramsPerSec / 740.0;
       telemetria.consumo_ml_min = (float)(litrosPerSec * 1000.0 * 60.0);
     }
 
-    // ---- Derivados ----
-    // Consumo L/100km
     if (telemetria.velocidade > 5.0) {
       telemetria.consumo_l_100km = (telemetria.consumo_ml_min * 6.0) / telemetria.velocidade;
     } else {
       telemetria.consumo_l_100km = 99.9;
     }
 
-    // Boost_max (histórico)
     if (telemetria.boost > telemetria.boost_max) {
       telemetria.boost_max = telemetria.boost;
     }
 
-    // Cronômetro 0-100
     static uint32_t tempoInicioZeroCem = 0;
     static bool cronometroRodando = false;
     if (telemetria.velocidade <= 0.1) {
@@ -246,7 +297,6 @@ void inicializarWebServer() {
       cronometroRodando = false;
     }
 
-    // ---- Resposta ----
     StaticJsonDocument<384> doc;
     doc["ok"] = true;
     doc["rpm"] = telemetria.rpm;
@@ -284,13 +334,11 @@ void inicializarWebServer() {
     doc["motor_litros"] = telemetria.motor_litros;
     doc["eficiencia_ve"] = telemetria.eficiencia_ve;
     doc["modo_simulador"] = telemetria.modoSimulador;
-
     String jsonBuffer;
     serializeJson(doc, jsonBuffer);
     request->send(200, "application/json", jsonBuffer);
   });
 
-  // Compatibilidade: /get antigo
   server.on("/get", HTTP_GET, [](AsyncWebServerRequest *request){
     StaticJsonDocument<512> doc;
     doc["rpm"] = telemetria.rpm;
@@ -301,8 +349,23 @@ void inicializarWebServer() {
     request->send(200, "application/json", jsonBuffer);
   });
 
+  // -------- API: sniffer de debug raw --------
+  server.on("/api/bt/debug_raw", HTTP_GET, [](AsyncWebServerRequest *request){
+    if (request->hasParam("on")) {
+      int v = request->getParam("on")->value().toInt();
+      if (v != 0) {
+        btIniciarDebugRaw();
+        request->send(200, "text/plain", "debug raw ATIVADO");
+      } else {
+        btPararDebugRaw();
+        request->send(200, "text/plain", "debug raw DESATIVADO");
+      }
+    } else {
+      request->send(200, "text/plain", btDebugRawAtivo() ? "ATIVO" : "INATIVO");
+    }
+  });
 
-  // -------- Páginas estáticas (POR ÚLTIMO) --------
+  // -------- Páginas estáticas --------
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     if (htmlIndex) request->send(200, "text/html", htmlIndex);
     else request->send(500, "text/plain", "index.html nao carregado");
@@ -318,8 +381,13 @@ void inicializarWebServer() {
     else request->send(404, "text/plain", "logs.html nao carregado");
   });
 
+  server.on("/bt", HTTP_GET, [](AsyncWebServerRequest *request){
+    if (htmlBt) request->send(200, "text/html", htmlBt);
+    else request->send(404, "text/plain", "bt.html nao carregado (suba via /sd)");
+  });
+
   // -------- API: SD --------
-  registrarRotasSD(server);      // ← NOVO
+  registrarRotasSD(server);
 
   server.begin();
   Serial.println("WebServer: iniciado (HTMLs em PSRAM, API em /api/*)");
@@ -329,6 +397,7 @@ void inicializarWebServer() {
 // Loop
 // ---------------------------------------------------------------
 void atualizarWebSocket() {
+  // 1. Drena fila de logs
   String* msgPtr;
   while (xQueueReceive(xFilaLogsWebServer, &msgPtr, 0) == pdTRUE) {
     if (msgPtr != NULL) {
@@ -338,6 +407,62 @@ void atualizarWebSocket() {
     }
   }
 
+  // 2. Terminal BT: verifica resposta pendente
+  if (btTerminalIdPendente != 0) {
+    String resp;
+    bool ok;
+
+    if (btObterRespostaPublico(btTerminalIdPendente, resp, ok, DONO_BT_TERMINAL)) {
+      Serial.printf("WS: resposta BT [%s]\n", resp.c_str());
+
+      StaticJsonDocument<640> doc;
+      doc["tipo"] = "bt_rx";
+      doc["linha"] = resp;
+      doc["ok"] = ok;
+      String buf;
+      serializeJson(doc, buf);
+
+      AsyncWebSocketClient *c = ws.client(btTerminalClientId);
+      if (c) c->text(buf);
+      else ws.textAll(buf);
+
+      btTerminalIdPendente = 0;
+      btTerminalClientId = 0;
+    }
+    else if (millis() - btTerminalInicio >= 5000) {
+      StaticJsonDocument<128> doc;
+      doc["tipo"] = "bt_rx";
+      doc["linha"] = "(timeout no ESP)";
+      doc["ok"] = false;
+      String buf;
+      serializeJson(doc, buf);
+      AsyncWebSocketClient *c = ws.client(btTerminalClientId);
+      if (c) c->text(buf);
+      else ws.textAll(buf);
+      btTerminalIdPendente = 0;
+      btTerminalClientId = 0;
+    }
+  }
+
+  // 3. Sniffer raw
+  if (btDebugRawAtivo()) {
+    if (ws.count() > 0) {
+      String raw = btObterDebugRaw();
+      if (raw.length() > 0) {
+        StaticJsonDocument<1200> doc;
+        doc["tipo"] = "bt_raw";
+        doc["data"] = raw;
+        String buf;
+        serializeJson(doc, buf);
+        ws.textAll(buf);
+      }
+    } else {
+      // ninguém escutando — descarta
+      btObterDebugRaw();
+    }
+  }
+
+  // 4. Telemetria
   if (ws.count() == 0) return;
 
   unsigned long agora = millis();

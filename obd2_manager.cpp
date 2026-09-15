@@ -37,10 +37,10 @@ void vTarefaMockOBD2(void *pvParameters) {
         }
       }
 
-      if (pidEscolhido.length() > 0) {
+      //if (pidEscolhido.length() > 0) {
         // Envia apenas para o Monitor Serial do PC enquanto não ativamos a fila do WebSocket de logs
-        Serial.println("TX: " + pidEscolhido + " -> RX: [OK]");
-      }
+      //  Serial.println("TX: " + pidEscolhido + " -> RX: [OK]");
+      //}
     }
     vTaskDelay(pdMS_TO_TICKS(5));
   }
